@@ -6,16 +6,19 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'check = monitor; inspect = stock only; test-email = send test'
+        description: 'bootstrap starts continuous monitoring; watch continues it'
         type: choice
-        default: inspect
+        default: bootstrap
         options:
-          - inspect
+          - bootstrap
+          - watch
           - check
+          - inspect
           - test-email
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: nmixx-stock-monitor
@@ -24,23 +27,59 @@ concurrency:
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 65
     steps:
       - uses: actions/checkout@v6
-      - name: Check stock and notify
+        with:
+          ref: main
+      - name: Monitor inventory every five minutes
         env:
-          MODE: ${{ inputs.mode || 'check' }}
+          RUN_MODE: ${{ inputs.mode || 'watch' }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           ALERT_TO: ${{ secrets.ALERT_TO }}
-        run: python3 monitor.py
-      - name: Persist stock status and daily health checkpoint
-        if: ${{ github.event_name == 'schedule' || inputs.mode == 'check' }}
+        shell: bash
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add stock-state.json
-          if ! git diff --cached --quiet; then
-            git commit -m 'Record inventory status and daily health checkpoint'
-            git push
-          fi
+          rounds=1
+          mode="$RUN_MODE"
+          if [[ "$RUN_MODE" == "watch" ]]; then rounds=12; mode=check; fi
+          if [[ "$RUN_MODE" == "bootstrap" ]]; then mode=check; fi
+          failed=0
+          for ((i=1; i<=rounds; i++)); do
+            started=$SECONDS
+            echo "Inventory check $i/$rounds"
+            if MODE="$mode" python3 monitor.py; then
+              if [[ "$mode" == "check" && -f stock-state.json ]]; then
+                git add stock-state.json
+                if ! git diff --cached --quiet; then
+                  git commit -m 'Record inventory status and daily health checkpoint'
+                  git push origin HEAD:main
+                fi
+              fi
+            else
+              failed=1
+              echo '::warning::This inventory check failed; the next check will retry.'
+            fi
+            if (( i < rounds )); then
+              remaining=$((300 - SECONDS + started))
+              if (( remaining > 0 )); then sleep "$remaining"; fi
+            fi
+          done
+          exit "$failed"
+      - name: Start the next monitoring session automatically
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.mode == 'watch' || inputs.mode == 'bootstrap') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          for attempt in 1 2 3; do
+            if gh workflow run monitor.yml --ref main -f mode=watch; then
+              echo 'Next monitoring session dispatched automatically.'
+              exit 0
+            fi
+            sleep 10
+          done
+          echo '::error::Could not start the next session. Scheduled runs remain as a fallback.'
+          exit 1
