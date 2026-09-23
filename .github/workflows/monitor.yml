@@ -1,0 +1,46 @@
+name: NMIXX restock alert
+
+on:
+  schedule:
+    - cron: '2-57/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'check = monitor; inspect = stock only; test-email = send test'
+        type: choice
+        default: inspect
+        options:
+          - inspect
+          - check
+          - test-email
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nmixx-stock-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check stock and notify
+        env:
+          MODE: ${{ inputs.mode || 'check' }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          ALERT_TO: ${{ secrets.ALERT_TO }}
+        run: python3 monitor.py
+      - name: Persist stock status and daily health checkpoint
+        if: ${{ github.event_name == 'schedule' || inputs.mode == 'check' }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add stock-state.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record inventory status and daily health checkpoint'
+            git push
+          fi
