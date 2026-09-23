@@ -62,6 +62,11 @@ def send_mail(subject, body):
 def run(mode="check"):
     if mode not in {"check", "inspect", "test-email"}:
         raise ValueError("Unknown mode")
+    # One-time pause: September 23, 2026, 08:00 America/New_York (EDT).
+    resume_at = datetime(2026, 9, 23, 12, 0, tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) < resume_at:
+        print("Paused until 2026-09-23 08:00 EDT (12:00 UTC); no inventory request or email.")
+        return
     data = fetch_product()
     now = datetime.now(timezone.utc)
     available = data["available"]
