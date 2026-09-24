@@ -40,3 +40,11 @@ Actions → NMIXX restock alert → Run workflow：
 本项目仅依赖 Python 标准库。公开日志不打印邮箱或密码，不接受 pull_request 触发，不向第三方 Action 传递邮件 Secrets。
 
 参考：[GitHub 定时任务](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows)、[Shopify Product API](https://shopify.dev/docs/api/ajax/reference/product)、[Google 应用专用密码](https://support.google.com/accounts/answer/185833)。
+
+## 实际运行
+
+<img width="350" alt="88cea152bd3071658eee1267ba3f41a2" src="https://github.com/user-attachments/assets/579fc9cf-9ff9-45d9-b66c-da421efa7f77" />
+<img width="350" alt="37e9805f97fa3e408455e3792bece2af" src="https://github.com/user-attachments/assets/0d9003be-5d7c-45cf-b651-c53e7062c2d2" />
+
+
+
